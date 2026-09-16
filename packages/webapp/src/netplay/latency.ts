@@ -13,20 +13,6 @@ export type LatencyTier = 'good' | 'fair' | 'poor';
  */
 export const getTier = (ms: number): LatencyTier => (ms <= 100 ? 'good' : ms <= 200 ? 'fair' : 'poor');
 
-/** 各分级需要弱化的信号弧 part，与 elements/net.ts 的 signalIcon 对应 */
-export const TIER_DIM_PARTS: Record<LatencyTier, string[]> = {
-  good: [],
-  fair: ['g4'],
-  poor: ['g3', 'g4'],
-};
-
-/** 各分级对应的 theme 语义色 key，延迟到渲染时取值以保持主题响应 */
-export const TIER_COLOR_KEY: Record<LatencyTier, 'positiveColor' | 'noticeColor' | 'negativeColor'> = {
-  good: 'positiveColor',
-  fair: 'noticeColor',
-  poor: 'negativeColor',
-};
-
 /**
  * `currentRoundTripTime` 的单位是秒，必须 ×1000 转毫秒。
  * 注意 0 是合法值（<0.5ms 的本地回环），因此用 `== null` 而非 falsy 判断。
@@ -34,11 +20,11 @@ export const TIER_COLOR_KEY: Record<LatencyTier, 'positiveColor' | 'noticeColor'
 export const rttToMs = (rtt?: number | null): number | undefined => (rtt == null ? undefined : Math.round(rtt * 1000));
 
 /**
- * 从 RTCStatsReport 中挑出当前生效的 candidate-pair 的 RTT（单位：秒）。
+ * 读出当前生效的 candidate-pair 的 RTT，**单位是秒**（与 WebRTC 规范一致）。
  * 优先 `nominated && state === 'succeeded'`；否则退回任一 succeeded 且有 RTT 的 pair。
  * 不使用 `selected` 属性——它已从 W3C 规范移除，新浏览器不再返回。
  */
-export const pickCandidatePair = (report: RTCStatsReport): number | undefined => {
+export const readActiveRttSeconds = (report: RTCStatsReport): number | undefined => {
   let fallback: number | undefined;
   for (const stat of report.values()) {
     if (stat.type !== 'candidate-pair') continue;
@@ -109,6 +95,12 @@ export class LatencyMonitor {
    * 此时若 add() 仅凭 #timer 判断就会再起一条循环，导致双循环。
    */
   #running = false;
+  /**
+   * 代际号。仅用 `#conns.size === 0` 无法识别取消：await 期间若发生 remove → add
+   * 交错（重连正是这条路径，createRTCPeerConnection 首行就调 deleteUser），
+   * size 会被后来的 add 抹回非 0，旧 tick 便会复活并再排一条循环，造成双循环永久并存。
+   */
+  #epoch = 0;
 
   constructor({ getNickname, getFallback }: MonitorOptions) {
     this.#getNickname = getNickname;
@@ -133,6 +125,9 @@ export class LatencyMonitor {
     clearTimeout(this.#timer);
     this.#timer = 0;
     this.#running = false;
+    // 递增代际号，让 in-flight 的 tick 能识别出自己出发时的世界已被销毁
+    this.#epoch++;
+    this.#windows.clear();
     latencyStore({ peers: {}, worst: undefined });
   };
 
@@ -142,28 +137,32 @@ export class LatencyMonitor {
 
   #tick = async () => {
     this.#timer = 0;
+    // 同步阶段的守卫：此处不可能有 add 交错，置 #running = false 是安全的。
+    // 也是最后一道保险——若没有它，空连接表会让下面排出一条永远空转的 1Hz 循环。
     if (this.#conns.size === 0) {
       this.#running = false;
       return;
     }
 
+    const epoch = this.#epoch;
     const entries = [...this.#conns];
     const fallback = this.#getFallback();
     // allSettled 而非 all：单个连接 reject 不应让全部延时数据一起消失
     const results = await Promise.allSettled(entries.map(([, conn]) => conn.getStats()));
 
-    // await 之后二次守卫：此期间可能已离开房间（conns 被清空），
-    // 若继续排下一轮就会永久泄漏一个 1Hz 定时器，反复对已关闭连接调 getStats。
-    if (this.#conns.size === 0) {
-      this.#running = false;
-      return;
-    }
+    // await 之后的取消判定：只认代际号，不能再用 `#conns.size === 0`。
+    // 此处绝不能修改 #running——它可能已被后续的 add() 置为 true 并排好了新定时器，
+    // 若在这里置 false，下一次 add 又会再起一条循环，双循环问题原样复现。
+    if (epoch !== this.#epoch) return;
 
     const peers: Record<number, LatencyPeer> = {};
     let worst: number | undefined;
     results.forEach((result, index) => {
       const [userId] = entries[index];
-      const statsRtt = result.status === 'fulfilled' ? pickCandidatePair(result.value) : undefined;
+      // entries 是 await 之前的快照，其间可能有用户离开；
+      // 跳过已不在连接表中的 userId，避免用 stale 数据污染 peers 与 worst
+      if (!this.#conns.has(userId)) return;
+      const statsRtt = result.status === 'fulfilled' ? readActiveRttSeconds(result.value) : undefined;
       // L1 → L2。用 `??` 而非 `||`，保证 0ms 是合法值不会误触回退
       const rtt = rttToMs(statsRtt) ?? fallback[userId];
       // L3：两级都拿不到则该 peer 不写入 store
