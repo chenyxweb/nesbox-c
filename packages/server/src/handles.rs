@@ -129,11 +129,17 @@ pub async fn webhook(
             match get_game_from_name(&mut conn, &old_name) {
                 Some(game) => {
                     update_game(&mut conn, game.id, &sc_game).ok();
-                    let _ = Client::new()
-                        .post("https://nesbox.709922234.workers.dev")
-                        .json(&sc_game)
-                        .send()
-                        .await;
+                    // 私有化部署：GAMES_SYNC_URL 为空或 "off" 时跳过同步；
+                    // 未设置时保持官方 CF Worker 地址以兼容现有行为
+                    let sync_url = std::env::var("GAMES_SYNC_URL")
+                        .unwrap_or_else(|_| "https://nesbox.709922234.workers.dev".to_string());
+                    if !sync_url.is_empty() && sync_url != "off" {
+                        let _ = Client::new()
+                            .post(&sync_url)
+                            .json(&sc_game)
+                            .send()
+                            .await;
+                    }
                 }
                 None => {
                     if closed {

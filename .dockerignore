@@ -4,3 +4,23 @@ dist
 *.log
 .env
 .git
+
+# 私有化部署产物（通过 volume 挂载，不需要进入构建上下文）
+deploy/data
+deploy/postgres/init/02-games.sql
+deploy/postgres/init/03-games-update.sql
+deploy/*.md
+deploy/scripts
+
+# 与构建无关的目录
+screenshots
+docs
+.github
+.vscode
+.zed
+
+# 非 webapp / server 构建所需的包
+packages/flutter_app
+packages/tauriapp
+packages/nes
+games/gomoku

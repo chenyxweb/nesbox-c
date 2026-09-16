@@ -22,7 +22,7 @@ import { debounce } from 'duoyun-ui/lib/timer';
 import { isNotNullish } from 'duoyun-ui/lib/types';
 import { isIncludesString } from 'duoyun-ui/lib/utils';
 import { configure, getShortcut, SearchCommand, setSearchCommand, toggleSearchState } from 'src/configure';
-import { paramKeys } from 'src/constants';
+import { aiSearchBase, paramKeys } from 'src/constants';
 import { i18n } from 'src/i18n/basic';
 import { icons } from 'src/icons';
 import { routes } from 'src/routes';
@@ -314,8 +314,10 @@ export class MSearchElement extends GemElement {
   #aiSearch = debounce(() => {
     const { search, result } = this.#state;
     if (!search || result.length > 5) return;
+    // 未配置 AI 搜索服务地址时（私有化部署）直接跳过
+    if (!aiSearchBase) return;
     this.#abortCon = new AbortController();
-    fetch(`https://nesbox.709922234.workers.dev/search?${new URLSearchParams({ q: this.#state.search })}`, {
+    fetch(`${aiSearchBase.replace(/\/$/, '')}/search?${new URLSearchParams({ q: this.#state.search })}`, {
       signal: this.#abortCon.signal,
     })
       .then((res) => res.json())

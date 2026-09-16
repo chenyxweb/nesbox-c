@@ -1,0 +1,248 @@
+-- ============================================================
+-- NESBox 数据库初始化 Schema
+-- 由 packages/server/migrations/ 下所有 diesel migration 合并而来
+-- 对应 diesel migration 版本: 2022-09-25-100612 (最新)
+--
+-- 此文件由 postgres 容器首次启动时自动执行
+-- (挂载到 /docker-entrypoint-initdb.d/01-schema.sql)
+--
+-- 如需后续通过 `diesel migration run` 增量升级，
+-- __diesel_schema_migrations 表已标记所有历史 migration 为已应用
+-- ============================================================
+
+BEGIN;
+
+-- ------------------------------------------------------------
+-- diesel 辅助函数 (来自 00000000000000_diesel_initial_setup)
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION diesel_manage_updated_at(_tbl regclass) RETURNS VOID AS $$
+BEGIN
+    EXECUTE format('CREATE TRIGGER set_updated_at BEFORE UPDATE ON %s
+                    FOR EACH ROW EXECUTE PROCEDURE diesel_set_updated_at()', _tbl);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION diesel_set_updated_at() RETURNS trigger AS $$
+BEGIN
+    IF (
+        NEW IS DISTINCT FROM OLD AND
+        NEW.updated_at IS NOT DISTINCT FROM OLD.updated_at
+    ) THEN
+        NEW.updated_at := current_timestamp;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ------------------------------------------------------------
+-- users 表
+-- 合并: init + long_password(varchar 256) + remove_user_status
+-- ------------------------------------------------------------
+CREATE TABLE users (
+    id          integer NOT NULL GENERATED ALWAYS AS IDENTITY,
+    username    varchar(20)  NOT NULL,
+    password    varchar(256) NOT NULL,
+    nickname    varchar(20)  NOT NULL,
+    settings    json         NULL,
+    deleted_at  timestamp    NULL,
+    created_at  timestamp    NOT NULL,
+    updated_at  timestamp    NOT NULL,
+    CONSTRAINT PK_6 PRIMARY KEY (id),
+    CONSTRAINT Index_7 UNIQUE (username)
+);
+
+-- ------------------------------------------------------------
+-- games 表
+-- 合并: init + add_screenshots(varchar 256 + screenshots)
+--      + game_name_length(varchar 100) + game_ext(platform/series/kind/max_player)
+-- ------------------------------------------------------------
+CREATE TABLE games (
+    id           integer NOT NULL GENERATED ALWAYS AS IDENTITY,
+    name         varchar(100) NOT NULL,
+    description  text         NOT NULL,
+    preview      varchar(256) NOT NULL,
+    deleted_at   timestamp    NULL,
+    created_at   timestamp    NOT NULL,
+    updated_at   timestamp    NOT NULL,
+    rom          varchar(256) NOT NULL,
+    screenshots  text         NULL,
+    platform     varchar(20)  NULL,
+    series       varchar(20)  NULL,
+    kind         varchar(10)  NULL,
+    max_player   integer      NULL,
+    CONSTRAINT PK_10 PRIMARY KEY (id),
+    CONSTRAINT Index_13 UNIQUE (name)
+);
+
+-- ------------------------------------------------------------
+-- rooms 表
+-- 合并: init + room_host(host) + room_screenshot(screenshot)
+-- ------------------------------------------------------------
+CREATE TABLE rooms (
+    id          integer NOT NULL GENERATED ALWAYS AS IDENTITY,
+    game_id     integer   NOT NULL,
+    private     boolean   NOT NULL,
+    created_at  timestamp NOT NULL,
+    updated_at  timestamp NOT NULL,
+    deleted_at  timestamp NULL,
+    host        integer   NOT NULL,
+    screenshot  text      NULL,
+    CONSTRAINT PK_54 PRIMARY KEY (id),
+    CONSTRAINT FK_84  FOREIGN KEY (game_id) REFERENCES games (id),
+    CONSTRAINT FK_194 FOREIGN KEY (host)    REFERENCES users (id)
+);
+
+CREATE INDEX FK_86  ON rooms (game_id);
+CREATE INDEX FK_194 ON rooms (host);
+
+-- ------------------------------------------------------------
+-- comments 表
+-- ------------------------------------------------------------
+CREATE TABLE comments (
+    user_id     integer   NOT NULL,
+    game_id     integer   NOT NULL,
+    body        text      NOT NULL,
+    "like"      boolean   NOT NULL,
+    deleted_at  timestamp NULL,
+    created_at  timestamp NOT NULL,
+    updated_at  timestamp NOT NULL,
+    CONSTRAINT PK_17 PRIMARY KEY (user_id, game_id),
+    CONSTRAINT FK_27 FOREIGN KEY (game_id) REFERENCES games (id),
+    CONSTRAINT FK_30 FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE INDEX FK_29 ON comments (game_id);
+CREATE INDEX FK_32 ON comments (user_id);
+
+-- ------------------------------------------------------------
+-- favorites 表
+-- ------------------------------------------------------------
+CREATE TABLE favorites (
+    user_id     integer   NOT NULL,
+    game_id     integer   NOT NULL,
+    created_at  timestamp NOT NULL,
+    CONSTRAINT PK_116 PRIMARY KEY (user_id, game_id),
+    CONSTRAINT FK_113 FOREIGN KEY (game_id) REFERENCES games (id),
+    CONSTRAINT FK_117 FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+CREATE INDEX FK_115 ON favorites (game_id);
+CREATE INDEX FK_119 ON favorites (user_id);
+
+-- ------------------------------------------------------------
+-- friends 表
+-- 合并: init + last_read_at(删除 last_read, 添加 last_read_at)
+-- ------------------------------------------------------------
+CREATE TABLE friends (
+    user_id       integer   NOT NULL,
+    target_id     integer   NOT NULL,
+    created_at    timestamp NOT NULL,
+    status        varchar(20) NOT NULL,
+    last_read_at  timestamp NOT NULL DEFAULT now(),
+    CONSTRAINT PK_42 PRIMARY KEY (user_id, target_id),
+    CONSTRAINT FK_39 FOREIGN KEY (user_id)   REFERENCES users (id),
+    CONSTRAINT FK_43 FOREIGN KEY (target_id) REFERENCES users (id)
+);
+
+CREATE INDEX FK_41 ON friends (user_id);
+CREATE INDEX FK_45 ON friends (target_id);
+
+-- ------------------------------------------------------------
+-- invites 表
+-- ------------------------------------------------------------
+CREATE TABLE invites (
+    id          integer NOT NULL GENERATED ALWAYS AS IDENTITY,
+    room_id     integer   NOT NULL,
+    target_id   integer   NOT NULL,
+    user_id     integer   NOT NULL,
+    created_at  timestamp NOT NULL,
+    deleted_at  timestamp NULL,
+    updated_at  timestamp NOT NULL,
+    CONSTRAINT PK_127 PRIMARY KEY (id),
+    CONSTRAINT FK_131 FOREIGN KEY (user_id)   REFERENCES users (id),
+    CONSTRAINT FK_134 FOREIGN KEY (target_id) REFERENCES users (id),
+    CONSTRAINT FK_170 FOREIGN KEY (room_id)   REFERENCES rooms (id)
+);
+
+CREATE INDEX FK_133 ON invites (user_id);
+CREATE INDEX FK_136 ON invites (target_id);
+CREATE INDEX FK_172 ON invites (room_id);
+
+-- ------------------------------------------------------------
+-- messages 表
+-- ------------------------------------------------------------
+CREATE TABLE messages (
+    id          integer NOT NULL GENERATED ALWAYS AS IDENTITY,
+    body        text      NOT NULL,
+    target_id   integer   NOT NULL,
+    user_id     integer   NOT NULL,
+    deleted_at  timestamp NULL,
+    created_at  timestamp NOT NULL,
+    updated_at  timestamp NOT NULL,
+    CONSTRAINT PK_104 PRIMARY KEY (id),
+    CONSTRAINT FK_106 FOREIGN KEY (user_id)   REFERENCES users (id),
+    CONSTRAINT FK_109 FOREIGN KEY (target_id) REFERENCES users (id)
+);
+
+CREATE INDEX FK_108 ON messages (user_id);
+CREATE INDEX FK_111 ON messages (target_id);
+
+-- ------------------------------------------------------------
+-- playing 表
+-- ------------------------------------------------------------
+CREATE TABLE playing (
+    user_id     integer   NOT NULL,
+    room_id     integer   NOT NULL,
+    created_at  timestamp NOT NULL,
+    CONSTRAINT PK_142 PRIMARY KEY (user_id, room_id),
+    CONSTRAINT FK_143 FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT FK_175 FOREIGN KEY (room_id) REFERENCES rooms (id)
+);
+
+CREATE INDEX FK_145 ON playing (user_id);
+CREATE INDEX FK_177 ON playing (room_id);
+
+-- ------------------------------------------------------------
+-- records 表 (来自 2022-09-04-200100_create_records)
+-- ------------------------------------------------------------
+CREATE TABLE records (
+    user_id             integer   NOT NULL,
+    game_id             integer   NOT NULL,
+    last_play_start_at  timestamp NOT NULL,
+    last_play_end_at    timestamp NULL,
+    play_total          bigint    NOT NULL,
+    CONSTRAINT PK_1 PRIMARY KEY (user_id, game_id),
+    CONSTRAINT FK_17 FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT FK_18 FOREIGN KEY (game_id) REFERENCES games (id)
+);
+
+CREATE INDEX FK_1 ON records (user_id);
+CREATE INDEX FK_3 ON records (game_id);
+
+-- ------------------------------------------------------------
+-- diesel migration 版本记录表
+-- 标记所有历史 migration 已应用，便于后续 `diesel migration run` 增量升级
+-- run_on 字段使用各 migration 目录名的时间戳部分
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS __diesel_schema_migrations (
+    version     BIGINT       NOT NULL PRIMARY KEY,
+    run_on      TIMESTAMP    NOT NULL DEFAULT now(),
+    dirty       BOOLEAN      NOT NULL DEFAULT false
+);
+
+INSERT INTO __diesel_schema_migrations (version, run_on, dirty) VALUES
+    (0,                    now(), false),  -- diesel_initial_setup
+    (20220504091330,       now(), false),  -- init
+    (20220512112831,       now(), false),  -- long_password
+    (20220517045440,       now(), false),  -- remove_user_status
+    (20220518043021,       now(), false),  -- add_screenshots
+    (20220521094301,       now(), false),  -- room_host
+    (20220607143248,       now(), false),  -- last_read
+    (20220608122325,       now(), false),  -- last_read_at
+    (20220619084258,       now(), false),  -- game_name_length
+    (20220805092602,       now(), false),  -- room_screenshot
+    (20220904200100,       now(), false),  -- create_records
+    (20220925100612,       now(), false);  -- game_ext
+
+COMMIT;

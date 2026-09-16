@@ -14,7 +14,15 @@ export const isApp = window.__TAURI__ || mediaQuery.isPWA || isMtApp;
 export const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 export const canonicalOrigin = 'https://nesbox.xianqiao.wang';
-export const corsOrigin = 'https://files.xianqiao.wang';
+// 私有化部署时可通过构建时环境变量 CORS_ORIGIN 注入：
+//   - 未设置: 使用官方默认代理 https://files.xianqiao.wang
+//   - "off": 禁用代理，使用相对路径（由同源 nginx 提供本地化资源）
+//   - 其他值: 使用指定的代理域名
+const ENV_CORS_ORIGIN = process.env.CORS_ORIGIN as string;
+export const corsOrigin = ENV_CORS_ORIGIN === 'off' ? '' : ENV_CORS_ORIGIN;
+// 私有化部署时未配置则为空字符串，用于禁用 AI 搜索 / AI 问答
+export const aiSearchBase = (process.env.AI_SEARCH_BASE ?? '') as string;
+export const aiCompletionsBase = (process.env.AI_COMPLETIONS_BASE ?? '') as string;
 export const githubUrl = 'https://github.com/mantou132/nesbox';
 export const githubIssue = `${githubUrl}/issues`;
 export const githubRelease = `${githubUrl}/releases`;

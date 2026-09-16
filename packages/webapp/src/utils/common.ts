@@ -18,6 +18,11 @@ export const setViewTransitionName = (ele: HTMLElement | null, name: string) => 
 export const isValidGameFile = (filename: string) => /\.(js|nes|wasm|zip|swf)$/i.test(filename);
 
 export const getCorSrc = (url: string) => {
+  // 本地化后的相对路径（如 /files/roms/xxx.zip）直接返回，由同源 nginx 提供
+  if (!url) return url;
+  if (url.startsWith('/') || url.startsWith('blob:') || url.startsWith('data:')) return url;
+  // 未配置 CORS_ORIGIN 时（私有化部署）直接返回原 URL，避免拼接出不合法的代理地址
+  if (!corsOrigin) return url;
   return `${corsOrigin}/${url}`;
 };
 

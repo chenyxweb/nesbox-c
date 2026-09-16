@@ -1,5 +1,6 @@
 import { adoptedStyle, attribute, createState, css, customElement, effect, GemElement, html } from '@mantou/gem';
 import { marked } from 'marked';
+import { aiCompletionsBase } from 'src/constants';
 import { eventStream } from 'src/services';
 
 import 'duoyun-ui/elements/unsafe';
@@ -33,10 +34,15 @@ export class MSeeElement extends GemElement {
 
   @effect((i) => [i.prompt])
   #req = () => {
+    // 未配置 AI 问答服务地址时（私有化部署）直接提示未启用，避免无效请求
+    if (!aiCompletionsBase) {
+      this.#state({ md: '_AI service is not configured for this deployment._' });
+      return;
+    }
     const initMd = 'Thinking...';
     this.#state({ md: initMd });
     const timer = setTimeout(async () => {
-      const url = `https://nesbox.709922234.workers.dev/completions?${new URLSearchParams({ q: this.prompt, l: i18n.currentLanguage })}`;
+      const url = `${aiCompletionsBase.replace(/\/$/, '')}/completions?${new URLSearchParams({ q: this.prompt, l: i18n.currentLanguage })}`;
       const iter = eventStream(url, { signal: this.#control.signal });
       for await (const chunk of iter) {
         const append = chunk.choices?.at(0)?.delta?.content;

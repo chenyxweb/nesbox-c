@@ -7,3 +7,22 @@ logs
 *.log
 npm-debug.log*
 .DS_Store
+
+# 私有化部署产物（保留目录结构与文档，忽略实际数据）
+deploy/.env
+deploy/data/*
+!deploy/data/roms/
+!deploy/data/previews/
+!deploy/data/screenshots/
+!deploy/data/description/
+deploy/data/roms/*
+!deploy/data/roms/.gitkeep
+deploy/data/previews/*
+!deploy/data/previews/.gitkeep
+deploy/data/screenshots/*
+!deploy/data/screenshots/.gitkeep
+deploy/data/description/*
+!deploy/data/description/.gitkeep
+# 本地化生成的 SQL（包含环境相关路径，不应提交）
+deploy/postgres/init/02-games.sql
+deploy/postgres/init/03-games-update.sql

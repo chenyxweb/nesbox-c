@@ -1,0 +1,123 @@
+# NESBox 私有化部署编排文件
+# 使用方式:
+#   1. 复制 .env.example 为 .env 并填写必要变量
+#   2. 运行 scripts/localize-games.mjs 完成游戏数据本地化
+#   3. docker compose up -d --build
+#
+# 跨架构部署 (本地 ARM 构建 → x86 服务器运行):
+#   server/webapp 已固定 platform: linux/amd64，可在 ARM 机器上
+#   `docker compose build` 后 `docker save` 导出镜像，传到 x86 服务器
+#   `docker load` 再 `docker compose up -d`（不加 --build，直接复用已加载镜像）。
+#
+# 服务拓扑:
+#   postgres  ─┐
+#              ├─→ server (Rust GraphQL, 内部 8080)
+#   data/     ─┘           ↑
+#                          │ /api/*
+#   webapp (nginx:80) ─────┘  对外暴露 ${WEBAPP_PORT}
+
+name: nesbox
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nesbox-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nesbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-nesbox}
+      # 使用 UTC 时间戳，避免时区问题
+      TZ: UTC
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # 首次启动时按文件名顺序执行 init 目录下的 .sql / .sh
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-nesbox} -d ${POSTGRES_DB:-nesbox}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - nesbox
+    # 默认不对外暴露数据库端口，如需外部访问可解开以下注释
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/server/Dockerfile
+    image: nesbox/server:local
+    # 固定 amd64：便于在 ARM 机器交叉构建后部署到 x86 服务器
+    platform: linux/amd64
+    container_name: nesbox-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # 通过 docker 内部网络访问 postgres
+      DATABASE_URL: postgres://${POSTGRES_USER:-nesbox}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nesbox}
+      # JWT 签名密钥，生产环境务必修改为随机字符串
+      SECRET: ${SECRET:?SECRET is required in .env}
+      PORT: 8080
+      # 私有化部署默认关闭向 CF Worker 同步游戏数据
+      # 如需启用，设置为你的 CF Worker URL；设置为 off 或空字符串表示禁用
+      GAMES_SYNC_URL: ${GAMES_SYNC_URL:-off}
+      RUST_LOG: ${RUST_LOG:-info}
+    networks:
+      - nesbox
+    # server 只在内部网络暴露，不映射到宿主机
+    expose:
+      - "8080"
+
+  webapp:
+    build:
+      context: ..
+      dockerfile: deploy/webapp/Dockerfile
+      args:
+        # 前端构建时注入的环境变量（会被 vite define 静态替换到 bundle 中）
+        API_BASE: ${API_BASE:-/api}
+        # off: 禁用代理，使用相对路径（私有化部署推荐）
+        # 留空: 使用官方默认代理 https://files.xianqiao.wang
+        CORS_ORIGIN: ${CORS_ORIGIN:-off}
+        # 为空表示禁用 AI 搜索
+        AI_SEARCH_BASE: ${AI_SEARCH_BASE:-}
+        # 为空表示禁用 AI 问答补全
+        AI_COMPLETIONS_BASE: ${AI_COMPLETIONS_BASE:-}
+    image: nesbox/webapp:local
+    # 固定 amd64：便于在 ARM 机器交叉构建后部署到 x86 服务器
+    platform: linux/amd64
+    container_name: nesbox-webapp
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      # 对外暴露的 HTTP 端口，可通过 lucky/caddy/nginx 反向代理配置 HTTPS
+      - "${WEBAPP_PORT:-8080}:80"
+    volumes:
+      # 本地化的游戏资源（ROM/预览图/截图）挂载到 nginx 静态目录
+      # 只读挂载，防止容器内误写
+      - ./data:/usr/share/nginx/html/files:ro
+    networks:
+      - nesbox
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  postgres-data:
+    driver: local
+
+networks:
+  nesbox:
+    driver: bridge
