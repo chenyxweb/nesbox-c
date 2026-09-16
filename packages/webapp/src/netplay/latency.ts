@@ -31,8 +31,7 @@ export const TIER_COLOR_KEY: Record<LatencyTier, 'positiveColor' | 'noticeColor'
  * `currentRoundTripTime` 的单位是秒，必须 ×1000 转毫秒。
  * 注意 0 是合法值（<0.5ms 的本地回环），因此用 `== null` 而非 falsy 判断。
  */
-export const rttToMs = (rtt?: number | null): number | undefined =>
-  rtt == null ? undefined : Math.round(rtt * 1000);
+export const rttToMs = (rtt?: number | null): number | undefined => (rtt == null ? undefined : Math.round(rtt * 1000));
 
 /**
  * 从 RTCStatsReport 中挑出当前生效的 candidate-pair 的 RTT（单位：秒）。
@@ -88,3 +87,100 @@ export const latencyStore = createState<{
   peers: Record<number, LatencyPeer>;
   worst?: number;
 }>({ peers: {} });
+
+type MonitorOptions = {
+  /** 从 RTCBasic.roles 解析昵称，RoleAnswer 未到达时返回 undefined */
+  getNickname: (userId: number) => string | undefined;
+  /** L2 回退源，由 RTCBasic 子类覆写 */
+  getFallback: () => Record<number, number | undefined>;
+};
+
+/** 采样间隔（ms）。用自递归 setTimeout 而非 setInterval，避免 getStats 变慢时任务堆积重叠 */
+const INTERVAL = 1000;
+
+export class LatencyMonitor {
+  #conns = new Map<number, RTCPeerConnection>();
+  #windows = new Map<number, SampleWindow>();
+  #getNickname: (userId: number) => string | undefined;
+  #getFallback: () => Record<number, number | undefined>;
+  #timer = 0;
+  /**
+   * 与 #timer 分离：tick 的 await 期间 #timer 为 0，
+   * 此时若 add() 仅凭 #timer 判断就会再起一条循环，导致双循环。
+   */
+  #running = false;
+
+  constructor({ getNickname, getFallback }: MonitorOptions) {
+    this.#getNickname = getNickname;
+    this.#getFallback = getFallback;
+  }
+
+  add = (userId: number, conn: RTCPeerConnection) => {
+    this.#conns.set(userId, conn);
+    if (!this.#running) {
+      this.#running = true;
+      this.#schedule();
+    }
+  };
+
+  remove = (userId: number) => {
+    this.#conns.delete(userId);
+    this.#windows.delete(userId);
+    if (this.#conns.size === 0) this.#stop();
+  };
+
+  #stop = () => {
+    clearTimeout(this.#timer);
+    this.#timer = 0;
+    this.#running = false;
+    latencyStore({ peers: {}, worst: undefined });
+  };
+
+  #schedule = () => {
+    this.#timer = window.setTimeout(this.#tick, INTERVAL);
+  };
+
+  #tick = async () => {
+    this.#timer = 0;
+    if (this.#conns.size === 0) {
+      this.#running = false;
+      return;
+    }
+
+    const entries = [...this.#conns];
+    const fallback = this.#getFallback();
+    // allSettled 而非 all：单个连接 reject 不应让全部延时数据一起消失
+    const results = await Promise.allSettled(entries.map(([, conn]) => conn.getStats()));
+
+    // await 之后二次守卫：此期间可能已离开房间（conns 被清空），
+    // 若继续排下一轮就会永久泄漏一个 1Hz 定时器，反复对已关闭连接调 getStats。
+    if (this.#conns.size === 0) {
+      this.#running = false;
+      return;
+    }
+
+    const peers: Record<number, LatencyPeer> = {};
+    let worst: number | undefined;
+    results.forEach((result, index) => {
+      const [userId] = entries[index];
+      const statsRtt = result.status === 'fulfilled' ? pickCandidatePair(result.value) : undefined;
+      // L1 → L2。用 `??` 而非 `||`，保证 0ms 是合法值不会误触回退
+      const rtt = rttToMs(statsRtt) ?? fallback[userId];
+      // L3：两级都拿不到则该 peer 不写入 store
+      if (rtt == null) return;
+
+      let win = this.#windows.get(userId);
+      if (!win) {
+        win = new SampleWindow();
+        this.#windows.set(userId, win);
+      }
+      win.push(rtt);
+
+      peers[userId] = { rtt, avg: win.avg, max: win.max, nickname: this.#getNickname(userId) || '' };
+      worst = worst === undefined ? rtt : Math.max(worst, rtt);
+    });
+
+    latencyStore({ peers, worst });
+    this.#schedule();
+  };
+}
