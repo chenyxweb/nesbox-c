@@ -38,28 +38,27 @@ import { exit } from 'node:process';
 
 import {
   buildUrlInfoMap,
+  CONCURRENCY,
+  DATA_DIR,
+  DEPLOY_DIR,
   downloadAllUrls,
   escapeSqlString,
   fetchGamesFromApi,
   loadCache,
+  LOCAL_FILES_URL_PREFIX,
   localizeRow,
   log,
-  DATA_DIR,
-  DEPLOY_DIR,
   NESBOX_API_URL,
-  LOCAL_FILES_URL_PREFIX,
-  CONCURRENCY,
 } from './lib.mjs';
 
 const OUTPUT_SQL = join(DEPLOY_DIR, 'postgres/init/03-games-update.sql');
 
 /**
  * 将游戏行转换为 INSERT VALUES 元组
- * 仅包含 games 表中的字段 (跳过 id，让数据库自动生成)
+ * 保留官方 id，确保跨部署 id 一致性（与 localize-games.mjs 的 COPY 行为对齐）
  */
 function rowToValuesTuple(row, colIdx, columns) {
-  const valueColumns = columns.filter((c) => c !== 'id');
-  const values = valueColumns.map((col) => {
+  const values = columns.map((col) => {
     const val = row[colIdx[col]];
     if (val === null || val === undefined) return 'NULL';
     return escapeSqlString(val);
@@ -110,7 +109,7 @@ async function main() {
   // ---------- 4. 生成 UPSERT SQL ----------
   log('[4/5] 生成增量更新 SQL …');
 
-  const valueColumns = columns.filter((c) => c !== 'id');
+  const valueColumns = columns;
   const outLines = [
     '-- ============================================================',
     '-- NESBox 游戏数据增量更新 (UPSERT 格式)',
@@ -123,8 +122,8 @@ async function main() {
     '--     psql -U nesbox -d nesbox < deploy/postgres/init/03-games-update.sql',
     '--',
     '-- 行为说明:',
-    '--   - 新游戏 (name 不存在): INSERT',
-    '--   - 已有游戏 (name 存在): UPDATE rom/preview/screenshots/description/updated_at',
+    '--   - 新游戏 (name 不存在): INSERT 带官方 id',
+    '--   - 已有游戏 (name 存在): UPDATE 同步官方 id + rom/preview/screenshots/description/updated_at',
     '--   - 保留 platform/series/kind/max_player 等用户可能已编辑的字段',
     '-- ============================================================',
     '',
@@ -141,6 +140,7 @@ async function main() {
   outLines.push(valueTuples.join(',\n'));
 
   outLines.push('ON CONFLICT (name) DO UPDATE SET');
+  outLines.push('  id          = EXCLUDED.id,');
   outLines.push('  description = EXCLUDED.description,');
   outLines.push('  preview     = EXCLUDED.preview,');
   outLines.push('  rom         = EXCLUDED.rom,');

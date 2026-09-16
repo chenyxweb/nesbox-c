@@ -25,7 +25,7 @@ import { type Role, RoleOffer } from 'src/netplay/common';
 import { applyFriend } from 'src/services/api';
 import { friendStore } from 'src/store';
 import { theme } from 'src/theme';
-import { getAvatar, getCDNSrc } from 'src/utils/common';
+import { getAvatar, getLocalAvatar } from 'src/utils/common';
 
 import 'duoyun-ui/elements/avatar';
 import 'duoyun-ui/elements/use';
@@ -209,7 +209,7 @@ export class MRoomPlayerItemElement extends GemElement {
   #getRenderData = () => {
     if (!this.playerRole?.userId) {
       return {
-        avatar: getCDNSrc(`https://ui-avatars.com/api/?name=P${Number(this.roleType) + 1}`),
+        avatar: getLocalAvatar(`P${Number(this.roleType) + 1}`),
         username: this.#isDisabledSlot
           ? html`<dy-use class="icon" .element=${icons.notAllowed}></dy-use>`
           : this.#isHostRole

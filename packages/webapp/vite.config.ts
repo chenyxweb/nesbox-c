@@ -36,11 +36,33 @@ const config = async ({ command }: any) => {
       'process.env.AI_SEARCH_BASE': JSON.stringify(process.env.AI_SEARCH_BASE ?? ''),
       // 私有化部署：AI 问答补全服务地址（为空时禁用）
       'process.env.AI_COMPLETIONS_BASE': JSON.stringify(process.env.AI_COMPLETIONS_BASE ?? ''),
+      // 本地开发：自定义游戏 dev ROM 服务器（games/* 用 esbuild serve 跑在 8000）
+      // 设置为空字符串可禁用探测，避免联调远端服务时 console 报连接错误
+      'process.env.DEV_ROM_SERVER': JSON.stringify(process.env.DEV_ROM_SERVER ?? 'http://localhost:8000'),
     },
     server: {
       allowedHosts: true,
       host: '0.0.0.0',
       port: 3003,
+      // 本地联调远端已部署服务：设置 DEV_PROXY_TARGET=https://your-host:port
+      // 会把 /api/* (含 WebSocket 订阅) 与 /files/* 透传到远端，前端无需其他改动
+      ...(process.env.DEV_PROXY_TARGET
+        ? {
+            proxy: {
+              '/api': {
+                target: process.env.DEV_PROXY_TARGET,
+                changeOrigin: true,
+                secure: false,
+                ws: true,
+              },
+              '/files': {
+                target: process.env.DEV_PROXY_TARGET,
+                changeOrigin: true,
+                secure: false,
+              },
+            },
+          }
+        : {}),
     },
   });
 };

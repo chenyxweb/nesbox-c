@@ -298,9 +298,14 @@ export class MStageElement extends GemElement {
     this.#abortController = new AbortController();
 
     try {
-      const url = new URL(this.#rom!);
+      // 私有化部署 rom 为相对路径 (/files/roms/...)，需提供 base
+      // 官方部署 rom 为绝对 URL (https://...)，base 被忽略，行为不变
+      const url = new URL(this.#rom!, location.origin);
       let romBuffer = (await progressFetch(getCDNSrc(this.#rom!), { signal: this.#abortController.signal })).buffer;
       let filename = url.pathname.split('/').pop()!;
+      // ARCADE 平台：rom URL 带 ?arcade=原始文件名 参数（本地化脚本生成），FBNeo 需要原始名识别游戏
+      const arcadeName = url.searchParams.get('arcade');
+      if (arcadeName) filename = `${arcadeName}.zip`;
 
       // 街机模拟器依赖 zip 档文件名，所以不能修改文件名
       // 不是街机需要解压 zip 档

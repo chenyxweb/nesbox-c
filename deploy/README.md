@@ -139,7 +139,7 @@ node deploy/scripts/localize-games.mjs
 
 ```bash
 # 本地 ARM 机器，需先克隆仓库
-cd nesbox/deploy
+cd deploy
 
 # ARM 上通过 buildx + QEMU 模拟编译 amd64（Docker Desktop 默认已内置 QEMU）
 docker compose build              # 构建全部（server + webapp）

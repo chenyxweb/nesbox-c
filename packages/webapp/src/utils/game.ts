@@ -84,9 +84,9 @@ export function mapPointerButton(event: PointerEvent) {
 }
 
 const getDevRomFile = once(async function getDevRomFile() {
-  if (COMMAND === 'serve') {
+  const origin = process.env.DEV_ROM_SERVER;
+  if (COMMAND === 'serve' && origin) {
     try {
-      const origin = 'http://localhost:8000';
       const filenames = ['index_bg.wasm', 'index.js', 'index.wasm4.wasm', 'ffightub.zip', 'alienar.zip'];
       const filename =
         filenames[

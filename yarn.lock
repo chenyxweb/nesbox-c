@@ -1386,6 +1386,11 @@
   resolved "https://registry.yarnpkg.com/@mantou/nes-wasm4/-/nes-wasm4-0.0.6.tgz#4cae22789935867aaae66b58abea99b682c7506c"
   integrity sha512-+Dfefwa3s8Tzrih7VwqaXXvW/sbMW+HIB0H4HMlZzgaURAm9l0cMepEB+dSy03dytSj5hcBzfqMocs4vnq/0Hg==
 
+"@mantou/nes@^1.0.15":
+  version "1.0.16"
+  resolved "https://registry.npmmirror.com/@mantou/nes/-/nes-1.0.16.tgz#94ee4875c36691cb8dc99d741a29d248fdd14bcd"
+  integrity sha512-MwcNtEG/NTdaqz1ZRjWMbY59tbA+ElUrOUhnPi16+1s4vkDW0R/EZfAl79eSr+rFQyH2Ym4MAN00qtWcUsqsoQ==
+
 "@mantou/ruffle-core@^0.1.1":
   version "0.1.1"
   resolved "https://registry.yarnpkg.com/@mantou/ruffle-core/-/ruffle-core-0.1.1.tgz#3464d4b355291551849706df4cd5b18a851b340f"

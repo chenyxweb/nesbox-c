@@ -36,6 +36,15 @@ export const getAvatar = (username?: string) => {
   return `https://api.dicebear.com/5.x/pixel-art/svg?seed=${encodeURIComponent(username)}&backgroundColor=c0aede`;
 };
 
+/**
+ * 生成本地 SVG 字母头像（data URL），用于空位玩家占位
+ * 替代 ui-avatars.com，完全离线、无 CORS 问题
+ */
+export const getLocalAvatar = (text: string, bgColor = '#ddd', textColor = '#666') => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="${bgColor}"/><text x="64" y="64" font-size="64" font-family="system-ui,sans-serif" text-anchor="middle" dominant-baseline="central" fill="${textColor}">${text}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+};
+
 export const getGithubGames = async (s: string) => {
   const search = `${githubIssue}?q=is%3Aissue+label%3Agame+${encodeURIComponent(s.replaceAll(' ', '+'))}`;
   const text = await (await fetch(getCorSrc(search))).text();

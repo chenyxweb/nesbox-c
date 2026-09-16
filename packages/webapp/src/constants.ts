@@ -131,10 +131,16 @@ export const queryKeys = {
 };
 
 // clean outdate cache data
-['configure_v3', 'configure_v4'].forEach((key) => localStorage.removeItem(key));
+[
+  'configure_v3',
+  'configure_v4',
+  // 私有化部署游戏 id 体系变更后，旧缓存会导致房间内游戏 ROM 匹配失败（ROM load fail）
+  // 升级 store key 使旧缓存整体失效，详见 store.ts
+  'store_v2',
+].forEach((key) => localStorage.removeItem(key));
 export const localStorageKeys = {
   CONFIGURE_LOCAL_STORAGE_KEY: 'configure_v6',
-  STORE_LOCAL_STORAGE_KEY: 'store_v2',
+  STORE_LOCAL_STORAGE_KEY: 'store_v3',
   FRIEND_CHAT_STORAGE_KEY: 'friend_chat_v2',
 };
 

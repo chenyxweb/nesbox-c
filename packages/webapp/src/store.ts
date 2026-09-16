@@ -56,6 +56,13 @@ interface Store {
   lobbyMessage: LobbyMessage[];
 }
 
+// 清理旧版本 store 缓存（带用户名前缀的 key）
+// 私有化部署重装数据库后游戏 id 会重新分配，旧缓存与远端不一致会导致
+// 房间内游戏 ROM 匹配失败（ROM load fail），升级 key 后旧缓存整体失效
+for (const key of Object.keys(localStorage)) {
+  if (key.endsWith('@store_v2')) localStorage.removeItem(key);
+}
+
 export const { store } = createCacheStore<Store>(
   localStorageKeys.STORE_LOCAL_STORAGE_KEY,
   {

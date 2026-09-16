@@ -26,3 +26,4 @@ deploy/data/description/*
 # 本地化生成的 SQL（包含环境相关路径，不应提交）
 deploy/postgres/init/02-games.sql
 deploy/postgres/init/03-games-update.sql
+deploy/*.tar

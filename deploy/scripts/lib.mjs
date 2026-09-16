@@ -419,7 +419,15 @@ export function localizeRow(row, colIdx, urlInfo) {
 
   const rom = newRow[colIdx.rom];
   if (rom && urlInfo.has(String(rom))) {
-    newRow[colIdx.rom] = urlInfo.get(String(rom)).localUrl;
+    const info = urlInfo.get(String(rom));
+    let localUrl = info.localUrl;
+    // ARCADE 平台保留原始文件名供 FBNeo 识别（FBNeo 通过 zip 文件名查找游戏数据库）
+    const platform = newRow[colIdx.platform];
+    if (platform && String(platform).toLowerCase() === 'arcade') {
+      const originalName = String(rom).split('/').pop()?.replace(/\.[^.]+$/, '');
+      if (originalName) localUrl += `?arcade=${encodeURIComponent(originalName)}`;
+    }
+    newRow[colIdx.rom] = localUrl;
   }
 
   const screenshots = newRow[colIdx.screenshots];
