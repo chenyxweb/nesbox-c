@@ -696,11 +696,28 @@ import { isMtApp } from '@nesbox/mtapp';
 import { fpsStyle } from 'src/elements/fps';
 import { signalIcon } from 'src/elements/net';
 import { i18n } from 'src/i18n/basic';
-import { getTier, latencyStore, TIER_COLOR_KEY, TIER_DIM_PARTS } from 'src/netplay/latency';
+import { getTier, type LatencyTier, latencyStore } from 'src/netplay/latency';
 import { theme } from 'src/theme';
 
 import 'duoyun-ui/elements/use';
 import 'src/elements/tooltip';
+
+/**
+ * 表现层常量，刻意放在元素而非 netplay/latency.ts：
+ * 'g3' / 'g4' 是 elements/net.ts 中 signalIcon 的 SVG part 名，
+ * 改图标结构时必须同步这里；theme 的语义色 key 同理。
+ */
+const TIER_DIM_PARTS: Record<LatencyTier, string[]> = {
+  good: [],
+  fair: ['g4'],
+  poor: ['g3', 'g4'],
+};
+
+const TIER_COLOR_KEY: Record<LatencyTier, 'positiveColor' | 'noticeColor' | 'negativeColor'> = {
+  good: 'positiveColor',
+  fair: 'noticeColor',
+  poor: 'negativeColor',
+};
 
 const style = css`
   :host {
@@ -1052,6 +1069,26 @@ git commit -m "docs: 补充网络延时指示器的实测验证结论"
 
 **2. 占位符扫描**：无 TBD / TODO / 「适当处理错误」/「类似 Task N」等；所有代码步骤均给出完整可落盘代码，所有命令均给出期望输出。
 
-**3. 类型一致性**：跨任务引用的名称已核对一致——`latencyStore`、`LatencyMonitor`、`LatencyPeer`、`SampleWindow`、`getTier`、`rttToMs`、`pickCandidatePair`、`TIER_DIM_PARTS`、`TIER_COLOR_KEY`、`signalIcon`、`getFallbackLatency`、`monitor.add` / `monitor.remove`、标签名 `nesbox-latency`。`i18n.get` 的插值参数已统一用 `String(...)` 包裹（其 rest 参数类型为 `string`，不接受 number）。
+**3. 类型一致性**：跨任务引用的名称已核对一致——`latencyStore`、`LatencyMonitor`、`LatencyPeer`、`LatencyTier`、`SampleWindow`、`getTier`、`rttToMs`、`readActiveRttSeconds`、`signalIcon`、`getFallbackLatency`、`monitor.add` / `monitor.remove`、标签名 `nesbox-latency`；`TIER_DIM_PARTS` / `TIER_COLOR_KEY` 定义在 `elements/latency.ts` 内部（不导出）。`i18n.get` 的插值参数已统一用 `String(...)` 包裹（其 rest 参数类型为 `string`，不接受 number）。
 
 **4. 中途状态可编译性**：Task 8 创建新元素时保留 `ping.ts`，Task 9/10 分别切换页面，Task 11 才删除——每个 Task 结束时 `tsc --noEmit` 均应为 exit 0。
+
+---
+
+## 实施偏差记录
+
+执行阶段由评审驱动产生以下偏差。**Task 1 / Task 2 的代码块已被本节取代**，以仓库实际代码为准；Task 8 的代码块已同步修正。
+
+| 偏差 | 原因 | 影响 |
+| --- | --- | --- |
+| `pickCandidatePair` 改名 `readActiveRttSeconds` | 原名暗示返回 candidate-pair 对象，实际返回**以秒为单位**的数值；单位正是本功能最大的坑点，应体现在名字里 | Task 1 代码块、桌测表中的函数名 |
+| `TIER_DIM_PARTS` / `TIER_COLOR_KEY` 从 `netplay/latency.ts` 下沉到 `elements/latency.ts` | 两者的值是 `elements/net.ts` 的 SVG part 名与 theme 色 key，属纯表现层。放在自称「测量逻辑集中处」的模块里，会与 SVG 结构隔空耦合 | Task 1 不再导出这两个常量；Task 8 内部定义 |
+| `LatencyMonitor` 新增 `#epoch` 代际号 | 原设计用 `#conns.size === 0` 作 await 后的取消判据，**不成立**：`createRTCPeerConnection` 首行即调 `deleteUser`，重连时 remove → add 同步交错会把 size 抹回非 0，旧 tick 复活并再排一条循环 → 两条 1Hz 循环永久并存 | Task 2 的 `#stop` 与 `#tick`；同时修复了 spec §10.2 原本以为已解决、实则未解决的泄漏路径 |
+| `#stop()` 补 `#windows.clear()` | 全量重置语义不应依赖调用方逐个 `remove` 来维持 | Task 2 |
+| `#tick` 内新增 `if (this.#conns.get(userId) !== conn) return` | `entries` 是 await 前的快照，其间该 userId 可能已离开、也可能已换成新连接（remove 后表非空时不触发 `#stop`，epoch 不变），必须比对**连接身份**而非仅查 key，否则 stale stats 会污染 `peers`、`worst` 与新建的采样窗口 | Task 2 |
+| `rttToMs` 写成单行 | Biome 格式化要求（118 字符 < lineWidth 120） | 无语义影响 |
+
+### 评审中明确不采纳的两项
+
+- **删除 `#tick` 首个 `size === 0` 守卫**（评审判定为死代码）：保留。它同时是最后一道保险——若不变量未来被破坏，没有它就会排出一条永远空转的 1Hz 循环。已在代码注释中说明它为何与 await 后的守卫不对称。
+- **`worst = Math.max(worst ?? 0, rtt)`**：不采纳。该写法隐含「RTT 非负」假设，现有的 `worst === undefined ? rtt : Math.max(worst, rtt)` 意图更明确且不依赖额外前提。

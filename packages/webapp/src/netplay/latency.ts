@@ -158,10 +158,11 @@ export class LatencyMonitor {
     const peers: Record<number, LatencyPeer> = {};
     let worst: number | undefined;
     results.forEach((result, index) => {
-      const [userId] = entries[index];
-      // entries 是 await 之前的快照，其间可能有用户离开；
-      // 跳过已不在连接表中的 userId，避免用 stale 数据污染 peers 与 worst
-      if (!this.#conns.has(userId)) return;
+      const [userId, conn] = entries[index];
+      // entries 是 await 之前的快照，其间该 userId 可能已离开，也可能已换成新连接
+      // （remove 后表非空时不会触发 #stop，epoch 不变，只能靠连接身份识别）；
+      // 比对连接而非仅查 key，避免用 stale stats 污染 peers、worst 与新建的采样窗口
+      if (this.#conns.get(userId) !== conn) return;
       const statsRtt = result.status === 'fulfilled' ? readActiveRttSeconds(result.value) : undefined;
       // L1 → L2。用 `??` 而非 `||`，保证 0ms 是合法值不会误触回退
       const rtt = rttToMs(statsRtt) ?? fallback[userId];
