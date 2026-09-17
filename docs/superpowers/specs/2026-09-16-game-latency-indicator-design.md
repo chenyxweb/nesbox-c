@@ -217,7 +217,9 @@ L3 保留现有 `ping.ts` 中「无数据即返回空模板」的行为——宁
 
 ### 无障碍
 
-`<dy-use>` 的 SVG 已带 `aria-hidden="true"`，因此给宿主元素加 `role="img"` + `aria-label=${i18n.get('tooltip.room.latency')}`，避免读屏器只念出一串数字而无上下文。
+给 `<dy-use>` 加 `role="img"` + `aria-label=${i18n.get('tooltip.room.latency')}`，避免读屏器只念出一串数字而无上下文。
+
+> 实施阶段更正：`signalIcon` 是 `net.ts` 里手写的 `raw` 模板，其 SVG **并没有** `aria-hidden="true"`（只有 `icons.ts` 中 `genIcon` 产出的图标才带）。但 `role="img"` 会把整个子树折叠为单一图像节点，内部装饰性 path 不会单独暴露给辅助技术，因此结果依然正确——仅最初给出的理由不成立。
 
 ## 8. 页面接线
 
