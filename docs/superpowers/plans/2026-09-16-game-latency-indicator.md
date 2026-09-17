@@ -1095,6 +1095,7 @@ git commit -m "docs: 补充网络延时指示器的实测验证结论"
 | commit `7e23d11` 不是原子的，且其中一处重排是错的 | 该 commit 除昵称修复外，还夹带了 `elements/latency.ts`（1 行）与 `pages/room.ts`（12 行）的 import 重排，被 `git add -A` 扫了进来。**来源已查实：不是 Task 11 的 `yarn lint`**——那次 lint 之后的 `git status` 只有 5 个无关文件 + `D ping.ts`，并不包含这两个文件；它们是在之后的评审阶段被某次写模式命令改动、再被 `git add -A` 带进来的。分开处理：`pages/room.ts` **是**规范输出（只读 `biome check` 通过），保留；`elements/latency.ts` **不是**——它被改成 `{ getTier, latencyStore, type LatencyTier }`，而只读 `biome check` 报错要求改回 `{ getTier, type LatencyTier, latencyStore }`，已还原 | Task 11 |
 | `latencyStore` 由 `createState` 改为 `createStore`（`aa72a8b`） | **Task 12 首轮手动验证发现的致命缺陷**：两端延时均不显示。根因见文末「gem store API 陷阱」 | Task 1；`netplay/latency.ts` |
 | `pingStore` 由 `createState` 改为 `createStore`（`dfc7c80`） | 与上同源的**既有**用法错误（非本功能引入，本功能只是照抄了它的写法）。修正后全仓库不再有模块顶层的 `createState`，其余 22 处均为元素内字段 | `netplay/client.ts` |
+| `readActiveRttSeconds` 改为优先用 `transport.selectedCandidatePairId` 定位活跃 pair（`d08553b`） | **Task 12 第二轮验证时发现**：原实现靠遍历 + `nominated` 猜测。ICE 切换链路后，废弃 pair 的 `currentRoundTripTime` 会**冻结**在最后一次测量值（不会变回 undefined），且 `nominated` 在 Chrome 中不保证唯一、`values()` 是 id 字典序，因此可能读到 stale 低值——实际走 TURN 150ms 却显示 0ms。**同机测试恰好覆盖不到这条路径** | Task 1；`netplay/latency.ts`；spec「candidate-pair 挑选」节已同步 |
 
 ### gem store API 陷阱（Task 12 首轮验证实测）
 
@@ -1135,6 +1136,39 @@ createState 产物：在 _StoreListenerMap 中 false | 属性已更新 23 | conn
 **顺带查明的既有事实**：原 `elements/ping.ts` 也用 `@connectStore(pingStore)`，因此客户端那个「Ping: XXms」**从来就没显示过**。该元素已在 Task 11 删除。
 
 **流程教训**：这个缺陷在原理上不可能被构建期检查发现——模块能正常求值、标签名能正常注册、`tsc` 与 `biome` 全部通过、Vite 转译冒烟测试 8 个模块全绿。「能构建」被当成了「能工作」的证据。凡是涉及响应式/订阅链路的功能，必须在浏览器里实际看一眼。
+
+### 同机测试的验证盲区（Task 12 实测）
+
+Task 12 的双端环境是「同一台机器两个窗口」。此时 ICE 选中 host candidate、数据在内核网络栈里转一圈就回来，真实 RTT 约 0.3–0.6ms；而 `rttToMs` 做 `Math.round(rtt * 1000)`，`Math.round(0.4)` → 0、`Math.round(0.5)` → 1，所以界面显示 **0ms / 1ms 交替是正确的**，不是缺陷。
+
+但这个环境的「全绿」信号极弱，以下各项**原理上无法覆盖**：
+
+| 验证项 | 为何覆盖不到 |
+| --- | --- |
+| #1 单位换算 | RTT ≈ 0.4ms，漏掉 `×1000` 时 `Math.round(0.0004)` 同样是 0，与正确结果**无法区分** |
+| #4 三档颜色分级 | 永远落 good 档，另两档看不到 |
+| #3 tooltip「最差玩家」前缀 | 只有一个客户端，`Object.keys(peers).length > 1` 恒为 false |
+| #6 L2 回退 | Chrome 同机也能从 `getStats` 拿到值，回退链永不触发 |
+| candidate-pair 选择正确性 | 只有一条 host pair，遍历必然命中它；ICE 切换、多 pair 竞争、TURN 中继全部缺席 |
+
+**可行的替代验证手段**：
+
+1. **纯函数在控制台直跑**，无需真实网络，能确定性钉死 #1 与 #4 的**判定逻辑**（颜色渲染本身仍需真机）：
+
+```js
+const m = await import('/netplay/latency.ts');
+console.table([
+  { 输入秒: 0.023, 期望: 23, 实际: m.rttToMs(0.023) },
+  { 输入秒: 0.15,  期望: 150, 实际: m.rttToMs(0.15) },
+  { 输入秒: 0,     期望: 0,  实际: m.rttToMs(0) },
+  { 输入秒: null,  期望: undefined, 实际: m.rttToMs(null) },
+]);
+console.table([100, 101, 200, 201].map((ms) => ({ ms, tier: m.getTier(ms) })));
+```
+
+2. **mock `RTCStatsReport` 跑场景验证**。`RTCStatsReport extends ReadonlyMap<string, any>`，而代码只用 `values()` 与 `get()`，因此直接用 `new Map(entries)` 就能作 mock，且 Map 按插入顺序遍历，可精确控制「先撞到哪条 pair」。`d08553b` 即用此法（四场景，旧实现下 A/C 两项 FAIL）。配合 esbuild `--alias:@mantou/gem=.../lib/store.js` 可绕开 gem 的 DOM 依赖，在 node 里直跑真实的 `netplay/latency.ts`。
+
+**教训**：同机双窗口是最省事的环境，但数值小、路径单一、回退链不触发。涉及网络测量的功能，至少需要一次跨机器验证；在那之前，用上述两种手段把可确定性验证的部分先钉死。
 
 ### Biome 2.4.10 实测记录
 

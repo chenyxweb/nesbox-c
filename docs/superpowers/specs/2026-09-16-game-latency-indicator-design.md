@@ -72,7 +72,7 @@ RTCBasic (netplay/common.ts)              ← 基类，host/client 共同父类
 LatencyMonitor (netplay/latency.ts)       ← 新增，唯一含测量逻辑的地方
   ├─ 自递归 setTimeout 1s 循环
   ├─ Promise.allSettled(conns.map(c => c.getStats()))
-  ├─ 挑出 nominated && state === 'succeeded' 的 candidate-pair
+  ├─ 经 transport.selectedCandidatePairId 定位当前活跃的 candidate-pair
   ├─ currentRoundTripTime(秒) × 1000 → ms，取整
   ├─ per-peer 环形缓冲（30 样本 = 30s）→ avg / max
   └─ 写入 latencyStore
@@ -123,11 +123,21 @@ tick():
 
 ### candidate-pair 挑选
 
-遍历 `RTCStatsReport`，优先级：
+优先走**权威路径**：`type === 'transport'` 的 stat 上的 `selectedCandidatePairId`，用它 `report.get(id)` 直接取出当前真正在传输的那条 pair。
 
-1. `type === 'candidate-pair'` && `nominated === true` && `state === 'succeeded'`
-2. 若无 nominated，退回任一 `state === 'succeeded'` 且 `currentRoundTripTime != null` 的 pair
-3. 都没有 → 该 peer 走回退链
+**不能靠遍历 + `nominated` 猜测**，两个原因叠加：
+
+1. 连通性检查尝试过的 pair（host / srflx / relay 的各种组合）只要成功就全部留在 report 里；Chrome 中 `nominated` 在链路切换后不保证唯一，而 `report.values()` 是 stats id 字典序，与活跃路径无关。
+2. 废弃 pair 的 `currentRoundTripTime` **不会变回 `undefined`**，而是冻结在最后一次测量值上——W3C 定义它为「latest round trip time，来自 STUN 连通性检查**含 consent 保活（RFC7675）**」，只有被选中的 pair 才会持续刷新。
+
+二者叠加的后果：实际走 TURN 中继 150ms，界面却显示一条废弃 host pair 的 0ms。
+
+优先级：
+
+1. `transport.selectedCandidatePairId` → `report.get(id).currentRoundTripTime`
+2. 权威路径存在、但选中的 pair 尚无 RTT → 返回 `undefined`，该 peer 走回退链（**绝不读别的 pair**，那正是 stale 值的来源）
+3. 浏览器完全未提供 `selectedCandidatePairId`（部分 Safari / WKWebView）→ 才退回遍历猜测：`nominated && state === 'succeeded'`，其次任一 succeeded 且 `currentRoundTripTime != null` 的 pair
+4. 都没有 → 该 peer 走回退链
 
 **不要使用 `selected` 属性**——它已从 W3C 规范移除，新浏览器不再返回。
 
