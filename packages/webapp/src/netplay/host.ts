@@ -21,6 +21,18 @@ import {
 import { sendSignal } from 'src/services/api';
 
 export class RTCHost extends RTCBasic {
+  /**
+   * L2 回退：客户端自报的 ping（`Ping` 消息携带的 `prevPing`，滞后一个采样周期）。
+   * 不是房主亲自测量的 RTT，精度低于 getStats，仅作降级显示之用。
+   */
+  getFallbackLatency = (): Record<number, number | undefined> => {
+    const result: Record<number, number | undefined> = {};
+    this.connMap.forEach((conn, userId) => {
+      result[userId] = this.channelMap.get(conn)?.clientPrevPing;
+    });
+    return result;
+  };
+
   #setRoles = (userId: number, msg: RoleOffer) => {
     const role: Role = { userId, username: msg.username, nickname: msg.nickname };
     const player = this.getPlayer(userId);
@@ -160,7 +172,9 @@ export class RTCHost extends RTCBasic {
     if (!frame.length) return;
     this.channelMap.forEach((channel) => {
       // Wait for client to send ping
-      if (!channel.clientPrevPing) return;
+      // 必须用 undefined 判断：ping 为 0 是合法值，
+      // 原先的 falsy 判断会导致该客户端永久收不到帧（画面卡死）
+      if (channel.clientPrevPing === undefined) return;
 
       if (configure.user?.settings.video.rtcImprove === RTCTransportType.CLIP) {
         channel.send(frame);
