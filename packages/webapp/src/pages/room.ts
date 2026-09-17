@@ -48,7 +48,7 @@ import 'src/modules/cheat-settings';
 import 'src/modules/combo-settings';
 import 'src/elements/list';
 import 'src/elements/fps';
-import 'src/elements/ping';
+import 'src/elements/latency';
 
 const style = css`
   .stage {
@@ -417,7 +417,8 @@ export class PRoomElement extends DuoyunWakeLockBaseElement {
         .padding=${'1em 0 5em'}
       ></m-stage>
       <dy-space class="info">
-        ${this.#isHost ? html`<nesbox-fps></nesbox-fps>` : html`<nesbox-ping></nesbox-ping>`}
+        ${this.#isHost ? html`<nesbox-fps></nesbox-fps>` : ''}
+        <nesbox-latency></nesbox-latency>
         <m-room-recorder class="icon" .getStream=${() => this.#stageRef.value!.getStream()}></m-room-recorder>
         <m-room-voice class="icon"></m-room-voice>
       </dy-space>
