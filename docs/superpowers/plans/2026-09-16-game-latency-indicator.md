@@ -361,7 +361,7 @@ git commit -m "feat: 新增 LatencyMonitor 采样循环与防泄漏守卫"
 在它**之前**插入三行：
 
 ```json
-  "tooltip.room.latency": "Network Latency",
+  "tooltip.room.latency": "Network latency",
   "tooltip.room.latencyStats": "Avg $1ms · Peak $2ms",
   "tooltip.room.latencyWorst": "Worst peer",
 ```
@@ -1087,6 +1087,7 @@ git commit -m "docs: 补充网络延时指示器的实测验证结论"
 | `#stop()` 补 `#windows.clear()` | 全量重置语义不应依赖调用方逐个 `remove` 来维持 | Task 2 |
 | `#tick` 内新增 `if (this.#conns.get(userId) !== conn) return` | `entries` 是 await 前的快照，其间该 userId 可能已离开、也可能已换成新连接（remove 后表非空时不触发 `#stop`，epoch 不变），必须比对**连接身份**而非仅查 key，否则 stale stats 会污染 `peers`、`worst` 与新建的采样窗口 | Task 2 |
 | `rttToMs` 写成单行 | Biome 格式化要求（118 字符 < lineWidth 120） | 无语义影响 |
+| en 的 `tooltip.room.latency` 用 Sentence case（`Network latency`） | 该命名空间其余文案均为 Sentence case（`Leave room`、`Turn on voice`），原计划的 Title Case 不一致 | Task 3 |
 
 ### 评审中明确不采纳的两项
 

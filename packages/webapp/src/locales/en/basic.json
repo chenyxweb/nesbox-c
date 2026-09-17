@@ -185,7 +185,7 @@
   "tooltip.game.startRecord": "Start recording",
   "tooltip.game.stopRecord": "Stop recording",
   "tooltip.login.imgCopyright": "Copyright",
-  "tooltip.room.latency": "Network Latency",
+  "tooltip.room.latency": "Network latency",
   "tooltip.room.latencyStats": "Avg $1ms · Peak $2ms",
   "tooltip.room.latencyWorst": "Worst peer",
   "tooltip.room.leave": "Leave room",

@@ -244,7 +244,7 @@ FPS 仍房主独占，延时变为**无条件渲染**。房主一行 4 项、客
 
 | key | zh-CN | en |
 | --- | --- | --- |
-| `tooltip.room.latency` | 网络延时 | Network Latency |
+| `tooltip.room.latency` | 网络延时 | Network latency |
 | `tooltip.room.latencyWorst` | 最差玩家 | Worst peer |
 | `tooltip.room.latencyStats` | 均值 $1ms · 峰值 $2ms | Avg $1ms · Peak $2ms |
 
