@@ -27,7 +27,7 @@ import { playHintSound } from 'src/utils/common';
 
 import 'duoyun-ui/elements/space';
 import 'src/elements/fps';
-import 'src/elements/ping';
+import 'src/elements/latency';
 import 'src/modules/room-voice';
 import 'src/modules/stage';
 
@@ -115,7 +115,7 @@ export class PMtRoomElement extends DuoyunWakeLockBaseElement {
       <m-stage ${this.#stageRef} class="stage"  .padding=${'2em 0 5em'}></m-stage>
       <dy-space class="info">
         <nesbox-fps v-if=${this.#playing?.host === configure.user?.id}></nesbox-fps>
-        <nesbox-ping v-else></nesbox-ping>
+        <nesbox-latency></nesbox-latency>
         <m-room-voice ${this.#voiceRef} class="icon" ></m-room-voice>
       </dy-space>
     `;
