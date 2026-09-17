@@ -3,7 +3,8 @@ import { genIcon } from 'duoyun-ui/lib/icons';
 
 import 'duoyun-ui/elements/use';
 
-const onlineIcon = raw`
+/** 信号格图标（圆点 + 3 道弧），每道弧带 part 以便按需弱化。elements/latency.ts 复用 */
+export const signalIcon = raw`
     <svg viewBox="0 0 24 24" fill="currentColor">
       <path d="M0 0h24v24H0V0zm0 0h24v24H0V0z" fill="none"/>
       <path part="g2" d="M9 17 12 20 15 17C13.35 15.34 10.66 15.34 9 17Z"/>
@@ -58,7 +59,7 @@ export class NesboxNetElement extends GemElement {
           opacity: 0.5;
         }
       </style>
-      <dy-use .element=${navigator.onLine ? onlineIcon : offlineIcon}></dy-use>
+      <dy-use .element=${navigator.onLine ? signalIcon : offlineIcon}></dy-use>
     `;
   };
 }
