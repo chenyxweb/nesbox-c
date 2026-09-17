@@ -22,6 +22,14 @@ export class RTCClient extends RTCBasic {
   #pingTimer = 0;
   #audio: HTMLAudioElement;
 
+  /**
+   * L2 回退：现有的应用层 ping（每 1s 发 Ping 消息、房主回显后计算得出）。
+   * 客户端的连接以自身 userId 为键（见 #startClient 中的 createRTCPeerConnection）。
+   */
+  getFallbackLatency = (): Record<number, number | undefined> => ({
+    [configure.user!.id]: pingStore.ping,
+  });
+
   #onSignal = async (event: CustomEvent<SignalDetail>) => {
     const { signal } = event.detail;
     try {
