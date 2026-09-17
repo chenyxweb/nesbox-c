@@ -21,10 +21,36 @@ export const rttToMs = (rtt?: number | null): number | undefined => (rtt == null
 
 /**
  * 读出当前生效的 candidate-pair 的 RTT，**单位是秒**（与 WebRTC 规范一致）。
- * 优先 `nominated && state === 'succeeded'`；否则退回任一 succeeded 且有 RTT 的 pair。
- * 不使用 `selected` 属性——它已从 W3C 规范移除，新浏览器不再返回。
+ *
+ * 优先走权威路径：`transport.selectedCandidatePairId` 直接指向当前真正在传输的那条 pair。
+ * 不能靠遍历 + `nominated` 猜测，原因有两个：
+ * 1. ICE 会尝试 host / srflx / relay 的多种组合，**成功的 pair 都留在 report 里**，
+ *    而 Chrome 中 `nominated` 在链路切换后不保证唯一，`report.values()` 又是 id 字典序，
+ *    与活跃路径无关；
+ * 2. 废弃 pair 的 `currentRoundTripTime` **不会变回 undefined**，而是冻结在最后一次测量值上
+ *    ——规范定义它是「latest RTT，来自 STUN 连通性检查**含 consent 保活（RFC7675）**」，
+ *    只有被选中的 pair 才会持续刷新。
+ * 二者叠加的后果：实际走 TURN 中继 150ms，界面却显示一条废弃 host pair 的 0ms。
  */
 export const readActiveRttSeconds = (report: RTCStatsReport): number | undefined => {
+  let hasSelectedId = false;
+  for (const stat of report.values()) {
+    if (stat.type !== 'transport') continue;
+    const selectedId = (stat as RTCTransportStats).selectedCandidatePairId;
+    if (!selectedId) continue;
+    hasSelectedId = true;
+    const pair = report.get(selectedId) as RTCIceCandidatePairStats | undefined;
+    const rtt = pair?.currentRoundTripTime;
+    // 0 是合法值（<0.5ms 的本地回环），用 == null 而非 falsy 判断
+    if (rtt != null) return rtt;
+  }
+  // 权威路径存在、但选中的 pair 还没测出 RTT 时，直接返回 undefined 交给 L2 回退，
+  // 绝不去读别的 pair——那正是 stale 值的来源。
+  if (hasSelectedId) return undefined;
+
+  // 回退：浏览器未提供 selectedCandidatePairId 时（如部分 Safari / WKWebView 版本），
+  // 只能退回遍历猜测。优先 nominated，其次任一 succeeded 且有 RTT 的 pair。
+  // 不使用 `selected` 属性——它已从 W3C 规范移除，新浏览器不再返回。
   let fallback: number | undefined;
   for (const stat of report.values()) {
     if (stat.type !== 'candidate-pair') continue;
