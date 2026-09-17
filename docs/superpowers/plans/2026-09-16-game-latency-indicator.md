@@ -836,7 +836,7 @@ import 'src/elements/latency';
 
 原地将 `ping` 替换为 `latency` 即可。
 
-> **实施阶段更正**：本计划原先声称「Biome 的 organizeImports 不重排副作用 import」，**这个论断是错的**。实测：`biome check --write` 确实会把整个副作用 import 块按字母序重排（`duoyun-ui/*` 在前、`src/*` 在后）。仓库已有提交处于未整理状态（历史漂移），而 CI 跑的是 `biome check --write`（修完就 exit 0、从不回写），所以漂移会长期累积。因此执行本任务后跑 `yarn lint` 会额外产生与本功能无关的 import 重排，属正常现象。
+> **实施阶段更正**：本计划原先声称「Biome 的 organizeImports 不重排副作用 import」，**这个论断是错的**。实测：biome 确实会把整个副作用 import 块按字母序重排（`duoyun-ui/*` 在前、`src/*` 在后）。仓库已有提交处于未整理状态（历史漂移），因此执行本任务后跑 `yarn lint` 可能额外产生与本功能无关的 import 重排，属正常现象；提交前需用 `git status` 核对并用显式路径 `git add`。
 
 - [ ] **Step 2: 替换 render 中的 info 区**
 
@@ -1091,12 +1091,13 @@ git commit -m "docs: 补充网络延时指示器的实测验证结论"
 | `rttToMs` 写成单行 | Biome 格式化要求（118 字符 < lineWidth 120） | 无语义影响 |
 | en 的 `tooltip.room.latency` 用 Sentence case（`Network latency`） | 该命名空间其余文案均为 Sentence case（`Leave room`、`Turn on voice`），原计划的 Title Case 不一致 | Task 3 |
 | `getNickname` 从内联箭头提为 `RTCBasic` 可覆写成员，并由 `RTCClient` 覆写 | **最终整体评审发现的语义缺陷**：`client.ts#startClient` 调 `createRTCPeerConnection(configure.user!.id)`，即以**自身** userId 为连接键（既有写法）；而基类的 `getNickname` 假定键是对端 id。结果客户端 tooltip 会显示**自己的昵称**（如「张三 23ms」），易被误读为另一个玩家的延时。客户端覆写为返回 `roles[Player.One]?.nickname`（房主昵称） | Task 5、7 |
-| commit `7e23d11` 不是原子的，且其中一处重排是错的 | 该 commit 除昵称修复外，还夹带了 Task 11 跑 `yarn lint`（含 `biome check --write`）产生、又被 `git add -A` 扫进来的两处 import 重排。分开处理：`pages/room.ts`（12 行）**是**规范输出，只读 `biome check` 通过，保留；`elements/latency.ts`（1 行）**不是**——biome 将 `{ getTier, type LatencyTier, latencyStore }` 改成了 `{ getTier, latencyStore, type LatencyTier }`，而只读 `biome check` 反过来报错要求改回去，已还原为前者 | Task 11 |
+| commit `7e23d11` 不是原子的，且其中一处重排是错的 | 该 commit 除昵称修复外，还夹带了 `elements/latency.ts`（1 行）与 `pages/room.ts`（12 行）的 import 重排，被 `git add -A` 扫了进来。**来源已查实：不是 Task 11 的 `yarn lint`**——那次 lint 之后的 `git status` 只有 5 个无关文件 + `D ping.ts`，并不包含这两个文件；它们是在之后的评审阶段被某次写模式命令改动、再被 `git add -A` 带进来的。分开处理：`pages/room.ts` **是**规范输出（只读 `biome check` 通过），保留；`elements/latency.ts` **不是**——它被改成 `{ getTier, latencyStore, type LatencyTier }`，而只读 `biome check` 报错要求改回 `{ getTier, type LatencyTier, latencyStore }`，已还原 | Task 11 |
 
-### Biome 2.4.10 的两个实测行为（踩过的坑）
+### Biome 2.4.10 实测记录
 
-1. **全仓 `biome check --write` 对含内联 `type` 修饰符的说明符会排出非规范结果**。单文件重跑 `--write` 又能得到规范形态，且为稳定不动点（连续 3 次 md5 不变）。因此**不要单凭 `--write` 的输出就当规范**，必须用只读 `biome check` 做最终判据。
+1. **只读 `biome check` 才是规范性的权威判据**。`--write` 的输出不必等于规范形态：本次 `elements/latency.ts` 的 import 说明符曾被改成 `{ getTier, latencyStore, type LatencyTier }`，而只读 check 反过来报错要求改回 `{ getTier, type LatencyTier, latencyStore }`。**该次误排的触发条件未能复现**：还原后重跑整仓 `yarn lint`，该行保持稳定不变，因此不能断定是整仓 `--write` 所致。此处只保留可复现的结论：以只读 check 为准。
 2. **`biome check --write` 即使内容未变也会报 `Fixed 1 file` 并重写文件**。判断是否真有改动要看 `git diff`，不能看这句提示。
+3. **整仓 `yarn lint` 每次都会重排 5 个与本功能无关的历史漂移文件**：`cspell.json`、`deploy/scripts/lib.mjs`、`deploy/scripts/localize-games.mjs`、`deploy/scripts/localize-incremental.mjs`、`packages/webapp/vite.config.ts`。CI 跑的也是 `--write`（修完即 exit 0、从不回写），所以漂移长期累积。提交前必须核对 `git status` 并用**显式路径** `git add`，避免扫进功能提交。
 
 ### 评审中明确不采纳的两项
 
