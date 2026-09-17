@@ -36,6 +36,8 @@ const config = async ({ command }: any) => {
       'process.env.AI_SEARCH_BASE': JSON.stringify(process.env.AI_SEARCH_BASE ?? ''),
       // 私有化部署：AI 问答补全服务地址（为空时禁用）
       'process.env.AI_COMPLETIONS_BASE': JSON.stringify(process.env.AI_COMPLETIONS_BASE ?? ''),
+      // 私有化部署：房间语音通话开关（留空禁用，非空启用）
+      'process.env.VOICE_ENABLED': JSON.stringify(process.env.VOICE_ENABLED ?? ''),
       // 本地开发：自定义游戏 dev ROM 服务器（games/* 用 esbuild serve 跑在 8000）
       // 设置为空字符串可禁用探测，避免联调远端服务时 console 报连接错误
       'process.env.DEV_ROM_SERVER': JSON.stringify(process.env.DEV_ROM_SERVER ?? 'http://localhost:8000'),

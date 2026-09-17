@@ -25,7 +25,7 @@ import { once } from 'duoyun-ui/lib/timer';
 import { isNotBoolean } from 'duoyun-ui/lib/types';
 import { getStringFromTemplate } from 'duoyun-ui/lib/utils';
 import { configure, getShortcut } from 'src/configure';
-import { type BcMsgEvent, BcMsgType, queryKeys } from 'src/constants';
+import { type BcMsgEvent, BcMsgType, queryKeys, voiceEnabled } from 'src/constants';
 import { closeListenerSet } from 'src/elements/titlebar';
 import { ScUserStatus } from 'src/generated/graphql';
 import { i18n } from 'src/i18n/basic';
@@ -420,7 +420,7 @@ export class PRoomElement extends DuoyunWakeLockBaseElement {
         ${this.#isHost ? html`<nesbox-fps></nesbox-fps>` : ''}
         <nesbox-latency></nesbox-latency>
         <m-room-recorder class="icon" .getStream=${() => this.#stageRef.value!.getStream()}></m-room-recorder>
-        <m-room-voice class="icon"></m-room-voice>
+        ${voiceEnabled ? html`<m-room-voice class="icon"></m-room-voice>` : ''}
       </dy-space>
       <m-ads class="ads" .attrs=${this.#game?.attributes}></m-ads>
       <div class="coach-mark-container">

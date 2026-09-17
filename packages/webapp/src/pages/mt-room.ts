@@ -14,7 +14,7 @@ import { DuoyunWakeLockBaseElement } from 'duoyun-ui/elements/base/wake-lock';
 import { createPath, matchPath } from 'duoyun-ui/elements/route';
 import { waitLoading } from 'duoyun-ui/elements/wait';
 import { configure } from 'src/configure';
-import { globalEvents, queryKeys } from 'src/constants';
+import { globalEvents, queryKeys, voiceEnabled } from 'src/constants';
 import { GamepadBtnIndex } from 'src/gamepad';
 import type { MVoiceRoomElement } from 'src/modules/room-voice';
 import type { MStageElement } from 'src/modules/stage';
@@ -116,7 +116,7 @@ export class PMtRoomElement extends DuoyunWakeLockBaseElement {
       <dy-space class="info">
         <nesbox-fps v-if=${this.#playing?.host === configure.user?.id}></nesbox-fps>
         <nesbox-latency></nesbox-latency>
-        <m-room-voice ${this.#voiceRef} class="icon" ></m-room-voice>
+        ${voiceEnabled ? html`<m-room-voice ${this.#voiceRef} class="icon" ></m-room-voice>` : ''}
       </dy-space>
     `;
   };

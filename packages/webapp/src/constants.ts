@@ -23,6 +23,8 @@ export const corsOrigin = ENV_CORS_ORIGIN === 'off' ? '' : ENV_CORS_ORIGIN;
 // 私有化部署时未配置则为空字符串，用于禁用 AI 搜索 / AI 问答
 export const aiSearchBase = (process.env.AI_SEARCH_BASE ?? '') as string;
 export const aiCompletionsBase = (process.env.AI_COMPLETIONS_BASE ?? '') as string;
+// 语音通话功能开关：留空禁用（默认），非空启用（构建期注入）
+export const voiceEnabled = Boolean(process.env.VOICE_ENABLED);
 export const githubUrl = 'https://github.com/mantou132/nesbox';
 export const githubIssue = `${githubUrl}/issues`;
 export const githubRelease = `${githubUrl}/releases`;
