@@ -1,4 +1,4 @@
-import { createState } from '@mantou/gem';
+import { createStore } from '@mantou/gem';
 
 /** 采样窗口长度（样本数），配合 1s 采样间隔即 30 秒 */
 export const SAMPLE_COUNT = 30;
@@ -69,7 +69,11 @@ export type LatencyPeer = {
   nickname: string;
 };
 
-export const latencyStore = createState<{
+// 必须用 createStore 而非 createState：
+// createState 只把更新通知给「模块求值时刻恰好在构造的那个 GemElement 实例」，
+// 且不注册进 gem 的 _StoreListenerMap，导致 @connectStore 的订阅静默失效（元素永不重渲染）。
+// 全局 store 一律用 createStore，见 elements/fps.ts。
+export const latencyStore = createStore<{
   peers: Record<number, LatencyPeer>;
   worst?: number;
 }>({ peers: {} });
