@@ -1,6 +1,7 @@
 import { type Button, Player } from '@mantou/nes';
 import { configure } from 'src/configure';
 import type { LocaleKey } from 'src/i18n/basic';
+import { LatencyMonitor } from 'src/netplay/latency';
 
 export enum ChannelMessageType {
   CHAT_TEXT,
@@ -130,7 +131,28 @@ export class RTCBasic extends EventTarget {
 
   stream: MediaStream;
 
+  /**
+   * L2 回退源：getStats 拿不到 currentRoundTripTime 时（如 Safari / WKWebView）使用。
+   * 默认无回退，由 RTCClient / RTCHost 覆写。
+   */
+  getFallbackLatency = (): Record<number, number | undefined> => ({});
+
+  /**
+   * 延时监测器。挂在基类上，host 与 client 共用同一套聚合逻辑：
+   * 房主有多条连接时取最差客户端，客户端只有一条连接时自然退化为「到房主的 RTT」。
+   */
+  monitor = new LatencyMonitor({
+    getNickname: (userId) => Object.values(this.roles).find((role) => role?.userId === userId)?.nickname,
+    // 包一层箭头延迟调用：子类的类属性在基类之后赋值，而该箭头只在 tick 时执行，
+    // 因此能正确解析到子类覆写版本
+    getFallback: () => this.getFallbackLatency(),
+  });
+
   deleteUser = (userId: number) => {
+    // 注销点。放在最前，确保即使后续分支提前返回也已完成注销。
+    // 注意：不能挂在本类的 destroy 上——RTCClient / RTCHost 用类属性箭头函数定义了同名成员，
+    // 会遮蔽基类实现导致基类 destroy 永不执行；而两者的 destroy 都会 forEach 调用 deleteUser。
+    this.monitor.remove(userId);
     const conn = this.connMap.get(userId);
     this.connMap.delete(userId);
     if (conn) {
@@ -158,6 +180,9 @@ export class RTCBasic extends EventTarget {
     });
     this.stream.getTracks().forEach((track) => conn.addTrack(track, this.stream));
     this.connMap.set(userId, conn);
+    // 注册点。首行的 deleteUser 已完成同 userId 的注销，
+    // 因此重连时是先 remove 再 add，采样窗口随之清零（旧链路样本不代表新链路）
+    this.monitor.add(userId, conn);
     return conn;
   };
 
