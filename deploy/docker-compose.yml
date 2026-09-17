@@ -91,6 +91,8 @@ services:
         AI_SEARCH_BASE: ${AI_SEARCH_BASE:-}
         # 为空表示禁用 AI 问答补全
         AI_COMPLETIONS_BASE: ${AI_COMPLETIONS_BASE:-}
+        # 留空表示禁用房间语音通话功能
+        VOICE_ENABLED: ${VOICE_ENABLED:-}
     image: nesbox/webapp:local
     # 固定 amd64：便于在 ARM 机器交叉构建后部署到 x86 服务器
     platform: linux/amd64

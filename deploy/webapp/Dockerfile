@@ -9,6 +9,7 @@
 #   CORS_ORIGIN          外部资源 CORS 代理域名，留空使用相对路径
 #   AI_SEARCH_BASE       AI 搜索服务地址，留空禁用
 #   AI_COMPLETIONS_BASE  AI 问答服务地址，留空禁用
+#   VOICE_ENABLED        房间语音通话开关，留空禁用，非空（如 1）启用
 # ============================================================
 
 # ---------- 构建阶段 ----------
@@ -21,10 +22,12 @@ ARG API_BASE=/api
 ARG CORS_ORIGIN=
 ARG AI_SEARCH_BASE=
 ARG AI_COMPLETIONS_BASE=
+ARG VOICE_ENABLED=
 ENV API_BASE=$API_BASE \
     CORS_ORIGIN=$CORS_ORIGIN \
     AI_SEARCH_BASE=$AI_SEARCH_BASE \
     AI_COMPLETIONS_BASE=$AI_COMPLETIONS_BASE \
+    VOICE_ENABLED=$VOICE_ENABLED \
     # 禁用 husky（容器内不需要 git hooks）
     HUSKY=0 \
     # 跳过 puppeteer 下载 Chromium：前端构建用不到，受限网络无法访问 storage.googleapis.com

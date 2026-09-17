@@ -272,6 +272,7 @@ curl http://localhost:8080/api/playground  # GraphQL Playground
 | `CORS_ORIGIN` | ❌ | `off` | 外部资源代理：`off` 禁用（使用本地资源），留空使用官方代理，或指定自定义域名 |
 | `AI_SEARCH_BASE` | ❌ | (空) | AI 搜索服务，留空禁用 |
 | `AI_COMPLETIONS_BASE` | ❌ | (空) | AI 问答服务，留空禁用 |
+| `VOICE_ENABLED` | ❌ | (空) | 房间语音通话，留空禁用，任意非空值（如 `1`）启用；`false`/`0` 同样视为启用，关闭请置空 |
 | `GAMES_SYNC_URL` | ❌ | `off` | 游戏数据同步 URL，`off` 禁用 |
 | `RUST_LOG` | ❌ | `info` | 后端日志级别 |
 
