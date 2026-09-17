@@ -30,6 +30,7 @@
 - **监测器绝不进入帧循环**，不碰 `sendFrame`、`video.rtcImprove`、帧发送节奏。
 - **`room.ts` / `mt-room.ts` 不得 import `latencyStore`**，否则渲染会级联到 canvas。
 - **`verbatimModuleSyntax: true`**：仅类型使用的 import 必须写 `import type`。
+- **模块级 store 必须用 `createStore`，绝不能用 `createState`**——后者不注册进 gem 的 `_StoreListenerMap`，`@connectStore` 会静默失效（元素永不重渲染）。详见文末「gem store API 陷阱」。
 - 不要把停表逻辑写进 `RTCBasic.destroy`——它被两个子类的类属性箭头函数遮蔽，永不执行。
 
 ## File Structure
@@ -1092,6 +1093,48 @@ git commit -m "docs: 补充网络延时指示器的实测验证结论"
 | en 的 `tooltip.room.latency` 用 Sentence case（`Network latency`） | 该命名空间其余文案均为 Sentence case（`Leave room`、`Turn on voice`），原计划的 Title Case 不一致 | Task 3 |
 | `getNickname` 从内联箭头提为 `RTCBasic` 可覆写成员，并由 `RTCClient` 覆写 | **最终整体评审发现的语义缺陷**：`client.ts#startClient` 调 `createRTCPeerConnection(configure.user!.id)`，即以**自身** userId 为连接键（既有写法）；而基类的 `getNickname` 假定键是对端 id。结果客户端 tooltip 会显示**自己的昵称**（如「张三 23ms」），易被误读为另一个玩家的延时。客户端覆写为返回 `roles[Player.One]?.nickname`（房主昵称） | Task 5、7 |
 | commit `7e23d11` 不是原子的，且其中一处重排是错的 | 该 commit 除昵称修复外，还夹带了 `elements/latency.ts`（1 行）与 `pages/room.ts`（12 行）的 import 重排，被 `git add -A` 扫了进来。**来源已查实：不是 Task 11 的 `yarn lint`**——那次 lint 之后的 `git status` 只有 5 个无关文件 + `D ping.ts`，并不包含这两个文件；它们是在之后的评审阶段被某次写模式命令改动、再被 `git add -A` 带进来的。分开处理：`pages/room.ts` **是**规范输出（只读 `biome check` 通过），保留；`elements/latency.ts` **不是**——它被改成 `{ getTier, latencyStore, type LatencyTier }`，而只读 `biome check` 报错要求改回 `{ getTier, type LatencyTier, latencyStore }`，已还原 | Task 11 |
+| `latencyStore` 由 `createState` 改为 `createStore`（`aa72a8b`） | **Task 12 首轮手动验证发现的致命缺陷**：两端延时均不显示。根因见文末「gem store API 陷阱」 | Task 1；`netplay/latency.ts` |
+| `pingStore` 由 `createState` 改为 `createStore`（`dfc7c80`） | 与上同源的**既有**用法错误（非本功能引入，本功能只是照抄了它的写法）。修正后全仓库不再有模块顶层的 `createState`，其余 22 处均为元素内字段 | `netplay/client.ts` |
+
+### gem store API 陷阱（Task 12 首轮验证实测）
+
+**症状**：`<nesbox-latency>` 在房主端与客户端都渲染为空，无任何报错。
+
+**根因**：`@mantou/gem` 有两个名字极像、机制完全不同的工厂：
+
+| | `createStore`（`lib/store.js`） | `createState`（`lib/reactive.js`） |
+| --- | --- | --- |
+| 注册进 `_StoreListenerMap` | ✅ `_StoreListenerMap.set(store, new Set())` | ❌ 从不 |
+| 更新时通知谁 | 所有 `connect()` 订阅者 | 只通知 `currentConstructGemElement`——**模块求值那一刻恰好在构造的某个元素实例** |
+| 设计用途 | 全局 / 模块级 store | 元素内私有字段 |
+
+gem 源码在 `createState` 上方就写着「**必须使用在字段中，否则会读取到错误的实例**」。
+
+`@connectStore(store)` 展开为 `connect(store, this.#update)`，而 `connect` 的实现是：
+
+```js
+const listeners = _StoreListenerMap.get(store);
+listeners?.add(func);   // ← optional chaining：store 不在 map 中时静默无操作，不报错
+```
+
+于是 `createState` 产物上的订阅**永远收不到通知**。元素首帧读到 `worst === undefined` 返回空模板，此后 store 再怎么更新也不触发重渲染。
+
+**最迷惑人的一点**：属性值本身是**正常更新**的（`assign(state, payload)` 生效）。所以 `LatencyMonitor` 的采样、单位换算、聚合、写 store 全都对，坏的只有通知链路——症状表现为「安静地空白」而非报错。
+
+**运行时对照实验**（一次性脚本直跑 gem 真实源码，验证后已删除）：
+
+```
+createStore 产物：在 _StoreListenerMap 中 true  | 属性已更新 23 | connect 回调触发 1 次
+createState 产物：在 _StoreListenerMap 中 false | 属性已更新 23 | connect 回调触发 0 次
+```
+
+对修复后的真实 `netplay/latency.ts` 断言：`已注册进 _StoreListenerMap: true | 回调触发 1 次 | PASS`。
+
+**旁证**：全仓库 25 处用法中，真正工作的全局 store（`elements/fps.ts`、`voiceStore`、`i18nStore`、`navStore`、`mtAppStore`、`routes`、`license`、`mt-games`、`mt-rooms`）**无一例外用 `createStore`**；`createState` 的其余用法全是元素内 `#state = createState(...)`。唯一的两个模块顶层 `createState` 就是 `pingStore` 与 `latencyStore`——后者是照着前者写的，把既有错误复制了一遍。
+
+**顺带查明的既有事实**：原 `elements/ping.ts` 也用 `@connectStore(pingStore)`，因此客户端那个「Ping: XXms」**从来就没显示过**。该元素已在 Task 11 删除。
+
+**流程教训**：这个缺陷在原理上不可能被构建期检查发现——模块能正常求值、标签名能正常注册、`tsc` 与 `biome` 全部通过、Vite 转译冒烟测试 8 个模块全绿。「能构建」被当成了「能工作」的证据。凡是涉及响应式/订阅链路的功能，必须在浏览器里实际看一眼。
 
 ### Biome 2.4.10 实测记录
 
