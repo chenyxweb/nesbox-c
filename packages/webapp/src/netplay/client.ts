@@ -1,4 +1,4 @@
-import { createState } from '@mantou/gem';
+import { createStore } from '@mantou/gem';
 import { Player } from '@mantou/nes';
 import { configure } from 'src/configure';
 import { globalEvents, type SignalDetail, SignalType } from 'src/constants';
@@ -14,7 +14,10 @@ import {
 } from 'src/netplay/common';
 import { sendSignal } from 'src/services/api';
 
-export const pingStore = createState<{ ping?: number }>({});
+// 模块级 store 必须用 createStore，不能用 createState（详见 netplay/latency.ts 的同款说明）：
+// createState 会把更新绑到模块求值时恰好在构造的某个无关元素上，
+// 而 #sendPing 每 1s 写一次，等于让那个元素每秒无谓重渲染。
+export const pingStore = createStore<{ ping?: number }>({});
 
 export class RTCClient extends RTCBasic {
   #host = 0;
