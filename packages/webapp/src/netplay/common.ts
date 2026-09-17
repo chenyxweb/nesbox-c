@@ -138,13 +138,21 @@ export class RTCBasic extends EventTarget {
   getFallbackLatency = (): Record<number, number | undefined> => ({});
 
   /**
+   * 按连接键解析对端昵称，供 tooltip 展示。默认实现假定键就是**对端**的 userId
+   * （房主侧成立：createRTCPeerConnection 传入的是客户端的 id）。
+   * 客户端侧的连接以自身 userId 为键，因此由 RTCClient 覆写。
+   */
+  getNickname = (userId: number): string | undefined =>
+    Object.values(this.roles).find((role) => role?.userId === userId)?.nickname;
+
+  /**
    * 延时监测器。挂在基类上，host 与 client 共用同一套聚合逻辑：
    * 房主有多条连接时取最差客户端，客户端只有一条连接时自然退化为「到房主的 RTT」。
    */
   monitor = new LatencyMonitor({
-    getNickname: (userId) => Object.values(this.roles).find((role) => role?.userId === userId)?.nickname,
-    // 包一层箭头延迟调用：子类的类属性在基类之后赋值，而该箭头只在 tick 时执行，
-    // 因此能正确解析到子类覆写版本
+    // 两个回调都包一层箭头延迟调用：子类的类属性在基类之后赋值，
+    // 而它们只在 tick 时执行，因此能正确解析到子类覆写版本
+    getNickname: (userId) => this.getNickname(userId),
     getFallback: () => this.getFallbackLatency(),
   });
 

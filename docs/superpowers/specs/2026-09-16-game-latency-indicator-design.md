@@ -213,7 +213,9 @@ L3 保留现有 `ping.ts` 中「无数据即返回空模板」的行为——宁
 均值 142ms · 峰值 233ms        ← tooltip.room.latencyStats
 ```
 
-`peers === 1`（客户端）时第二行直接渲染 `张三 23ms`——纯昵称 + 数字，不含可翻译词汇，**不需要 i18n key**。
+`peers === 1`（客户端）时第二行不加前缀，直接渲染 `李四 23ms`（李四 = **房主**昵称，即延时的对端）——纯昵称 + 数字，不含可翻译词汇，**不需要 i18n key**。
+
+> 实施阶段补充：客户端的连接以**自身** userId 为键（`client.ts#startClient` 的既有写法），而基类的昵称解析假定键是对端 id。因此 `getNickname` 必须像 `getFallbackLatency` 一样可被子类覆写，`RTCClient` 覆写为返回 `roles[Player.One]?.nickname`；否则客户端 tooltip 会显示自己的昵称，易被误读。
 
 ### 无障碍
 

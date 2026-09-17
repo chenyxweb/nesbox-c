@@ -1088,6 +1088,7 @@ git commit -m "docs: 补充网络延时指示器的实测验证结论"
 | `#tick` 内新增 `if (this.#conns.get(userId) !== conn) return` | `entries` 是 await 前的快照，其间该 userId 可能已离开、也可能已换成新连接（remove 后表非空时不触发 `#stop`，epoch 不变），必须比对**连接身份**而非仅查 key，否则 stale stats 会污染 `peers`、`worst` 与新建的采样窗口 | Task 2 |
 | `rttToMs` 写成单行 | Biome 格式化要求（118 字符 < lineWidth 120） | 无语义影响 |
 | en 的 `tooltip.room.latency` 用 Sentence case（`Network latency`） | 该命名空间其余文案均为 Sentence case（`Leave room`、`Turn on voice`），原计划的 Title Case 不一致 | Task 3 |
+| `getNickname` 从内联箭头提为 `RTCBasic` 可覆写成员，并由 `RTCClient` 覆写 | **最终整体评审发现的语义缺陷**：`client.ts#startClient` 调 `createRTCPeerConnection(configure.user!.id)`，即以**自身** userId 为连接键（既有写法）；而基类的 `getNickname` 假定键是对端 id。结果客户端 tooltip 会显示**自己的昵称**（如「张三 23ms」），易被误读为另一个玩家的延时。客户端覆写为返回 `roles[Player.One]?.nickname`（房主昵称） | Task 5、7 |
 
 ### 评审中明确不采纳的两项
 

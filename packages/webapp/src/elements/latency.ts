@@ -3,7 +3,7 @@ import { isMtApp } from '@nesbox/mtapp';
 import { fpsStyle } from 'src/elements/fps';
 import { signalIcon } from 'src/elements/net';
 import { i18n } from 'src/i18n/basic';
-import { getTier, type LatencyTier, latencyStore } from 'src/netplay/latency';
+import { getTier, latencyStore, type LatencyTier } from 'src/netplay/latency';
 import { theme } from 'src/theme';
 
 import 'duoyun-ui/elements/use';

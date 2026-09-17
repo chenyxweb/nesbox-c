@@ -40,15 +40,15 @@ import { theme } from 'src/theme';
 import 'duoyun-ui/elements/coach-mark';
 import 'duoyun-ui/elements/space';
 import 'duoyun-ui/elements/status-light';
-import 'src/modules/stage';
-import 'src/modules/room-recorder';
-import 'src/modules/room-voice';
+import 'src/elements/fps';
+import 'src/elements/latency';
+import 'src/elements/list';
 import 'src/modules/ads';
 import 'src/modules/cheat-settings';
 import 'src/modules/combo-settings';
-import 'src/elements/list';
-import 'src/elements/fps';
-import 'src/elements/latency';
+import 'src/modules/room-recorder';
+import 'src/modules/room-voice';
+import 'src/modules/stage';
 
 const style = css`
   .stage {

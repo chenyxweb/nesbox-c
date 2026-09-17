@@ -30,6 +30,13 @@ export class RTCClient extends RTCBasic {
     [configure.user!.id]: pingStore.ping,
   });
 
+  /**
+   * 客户端的连接以**自身** userId 为键，但延时的对端是房主。
+   * 若不覆写，基类实现会按该键查到自己的昵称，tooltip 就会显示「自己 23ms」，
+   * 让用户误读为另一个玩家的延时。此处改为返回房主（Player.One）的昵称。
+   */
+  getNickname = (_userId: number): string | undefined => this.roles[Player.One]?.nickname;
+
   #onSignal = async (event: CustomEvent<SignalDetail>) => {
     const { signal } = event.detail;
     try {
